@@ -1,0 +1,5 @@
+*.tmp
+.DS_Store
+
+# 原始聊天仅作本地整理依据，不上传
+archive/raw-chat-export/
