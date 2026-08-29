@@ -1,4 +1,4 @@
-name: run one-time unit repair
+name: final unit audit
 
 on:
   push:
@@ -7,58 +7,39 @@ on:
       - '.github/workflows/unit-repair-runner.yml'
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  repair:
+  audit:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - name: Execute prepared repair and resolve final audit item
+      - name: Scan every markdown file
         shell: python
         run: |
           from pathlib import Path
           import re
 
-          wf = Path('.github/workflows/unit-audit-once.yml').read_text(encoding='utf-8').splitlines()
-          marker = '      - name: Repair numeric-ma contamination'
-          start_step = wf.index(marker)
-          run_i = next(i for i in range(start_step, len(wf)) if wf[i].strip() == 'run: |')
-          end_i = next(i for i in range(run_i + 1, len(wf)) if wf[i].startswith('      - name: Commit repaired corpus'))
-          code_lines = wf[run_i + 1:end_i]
-          code = '\n'.join(line[10:] if line.startswith('          ') else line for line in code_lines)
-          try:
-              exec(compile(code, '<unit-repair>', 'exec'), {})
-          except SystemExit:
-              pass
-
-          # The first strict audit found one remaining arc-summary wording.
-          p = Path('arcs/first-foreign-trip.md')
-          text = p.read_text(encoding='utf-8').replace('列车晚七码钟抵达灰岭中央站', '列车晚七分钟抵达灰岭中央站')
-          p.write_text(text, encoding='utf-8')
-
-          skip_docs = {'canon/units.md', 'notes/unit-audit.md', 'notes/style-guide.md'}
           pat = re.compile(r'[零〇一二三四五六七八九十百千万两0-9点\.]+码')
           leftovers = []
-          for md in [x for x in Path('.').rglob('*.md') if '.git' not in x.parts and x.as_posix() not in skip_docs]:
-              for n, line in enumerate(md.read_text(encoding='utf-8').splitlines(), 1):
+          checked = 0
+          for p in sorted(Path('.').rglob('*.md')):
+              if '.git' in p.parts:
+                  continue
+              checked += 1
+              for n, line in enumerate(p.read_text(encoding='utf-8').splitlines(), 1):
                   for m in pat.finditer(line):
+                      # Legitimate Chinese word: 码头, including 第七码头/第八码头.
                       if line[m.end():m.end()+1] == '头':
                           continue
+                      # Legitimate fixed idiom: 两码事.
                       if m.group(0) == '两码' and line[m.start():m.end()+1] == '两码事':
                           continue
-                      leftovers.append((md, n, line))
+                      leftovers.append((p, n, line))
+          print(f'CHECKED_MARKDOWN={checked}')
           if leftovers:
-              for md, n, line in leftovers:
-                  print(f'{md}:{n}: {line}')
+              print('UNRESOLVED')
+              for p, n, line in leftovers:
+                  print(f'{p}:{n}: {line}')
               raise SystemExit(f'leftovers={len(leftovers)}')
-          print('CORPUS_UNIT_AUDIT_PASS')
-      - name: Commit repaired corpus
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A
-          git commit -m "统一计量、编号与时间写法"
-          git push origin main
+          print('FULL_REPO_UNIT_AUDIT_PASS')
