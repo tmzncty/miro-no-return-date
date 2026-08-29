@@ -14,15 +14,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Find suspicious numeric-ma tokens
+      - name: Aggregate suspicious numeric-ma tokens
         shell: python
         run: |
           from pathlib import Path
           import re
+          from collections import Counter, defaultdict
 
           roots = [Path('chapters'), Path('canon'), Path('notes'), Path('arcs')]
           pat = re.compile(r'[零〇一二三四五六七八九十百千万两0-9点\.]+码')
-          count = 0
+          counts = Counter()
+          examples = defaultdict(list)
+          total = 0
           for root in roots:
               if not root.exists():
                   continue
@@ -30,12 +33,16 @@ jobs:
                   text = p.read_text(encoding='utf-8')
                   for n, line in enumerate(text.splitlines(), 1):
                       for m in pat.finditer(line):
-                          # '码头' is an ordinary word, not a measurement suffix.
                           after = line[m.end():m.end()+1]
                           if after == '头':
                               continue
-                          count += 1
-                          left = max(0, m.start()-45)
-                          right = min(len(line), m.end()+45)
-                          print(f'{p}:{n}: {line[left:right]}')
-          print(f'\nTOTAL_SUSPICIOUS={count}')
+                          total += 1
+                          key = m.group(0) + '⟶' + line[m.end():m.end()+10]
+                          counts[key] += 1
+                          if len(examples[key]) < 3:
+                              examples[key].append(f'{p}:{n}: {line[max(0,m.start()-25):min(len(line),m.end()+35)]}')
+          for key, count in counts.most_common():
+              print(f'[{count:3}] {key}')
+              for ex in examples[key]:
+                  print('      ' + ex)
+          print(f'\nUNIQUE={len(counts)} TOTAL={total}')
