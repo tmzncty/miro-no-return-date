@@ -1,0 +1,41 @@
+name: one-time unit audit
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/unit-audit-once.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Find suspicious numeric-ma tokens
+        shell: python
+        run: |
+          from pathlib import Path
+          import re
+
+          roots = [Path('chapters'), Path('canon'), Path('notes'), Path('arcs')]
+          pat = re.compile(r'[零〇一二三四五六七八九十百千万两0-9点\.]+码')
+          count = 0
+          for root in roots:
+              if not root.exists():
+                  continue
+              for p in sorted(root.rglob('*.md')):
+                  text = p.read_text(encoding='utf-8')
+                  for n, line in enumerate(text.splitlines(), 1):
+                      for m in pat.finditer(line):
+                          # '码头' is an ordinary word, not a measurement suffix.
+                          after = line[m.end():m.end()+1]
+                          if after == '头':
+                              continue
+                          count += 1
+                          left = max(0, m.start()-45)
+                          right = min(len(line), m.end()+45)
+                          print(f'{p}:{n}: {line[left:right]}')
+          print(f'\nTOTAL_SUSPICIOUS={count}')
